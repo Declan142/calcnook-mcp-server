@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calcnook-mcp"
+version = "0.1.0"
+description = "MCP server wrapping the calcnook financial engine — 17 tools for compound interest, SIP/DCA, loans, retirement, BMI, Islamic finance, income tax (US/UK/CA/AU/IN), EOSG, VAT, and more."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Aditya Sharma", email = "wickedrita@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0",
+    "calcnook>=0.1.0",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Office/Business :: Financial",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://calcnook.com"
+Repository = "https://github.com/Declan142/calcnook-mcp-server"
+Issues = "https://github.com/Declan142/calcnook-mcp-server/issues"
+
+[project.scripts]
+calcnook-mcp = "calcnook_mcp.server:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
