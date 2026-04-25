@@ -7,7 +7,7 @@
 - **PyPI:** https://pypi.org/project/calcnook-mcp/0.1.0/
 - **GitHub:** https://github.com/Declan142/calcnook-mcp-server — public, MIT
 - **GitHub release:** https://github.com/Declan142/calcnook-mcp-server/releases/tag/v0.1.0
-- **Trusted publisher:** *NOT yet configured* — first push used account-wide PyPI token. To set up: pypi.org/manage/project/calcnook-mcp/settings/publishing → Owner `Declan142`, Repo `calcnook-mcp-server`, Workflow `publish.yml`, Env `pypi`
+- **Trusted publisher:** *deferred*. Publishes go via the existing account-wide PyPI token in `~/.claude/vault/pypi.md` — same path as v0.1.0. To set it up later: pypi.org/manage/project/calcnook-mcp/settings/publishing → Owner `Declan142`, Repo `calcnook-mcp-server`, Workflow `publish.yml`, Env `pypi`. Token-direct works fine for now.
 - **Tests:** 44 passing on Python 3.10-3.13
 - **Dependencies:** `mcp>=1.0`, `calcnook>=0.1.0` only
 
@@ -74,23 +74,34 @@ python3 -m pytest -q
 
 ## Open threads
 
-- **Trusted publisher** — set up once (4 fields), then v0.2.0+ auto-publishes
-- **Distribution amplification** (each ~2-5 min):
-  - PR to https://github.com/punkpeye/awesome-mcp-servers under Finance category
-  - Submit to https://claudemcp.com community directory
-  - Submit to https://mcp-server.fastn.ai (if active)
+- **Distribution amplification:**
+  - **awesome-mcp-servers PR — OPEN 2026-04-25:** https://github.com/punkpeye/awesome-mcp-servers/pull/5382 (added under Finance & Fintech, `Declan142:feat/add-calcnook-mcp-server`). Awaiting review/merge.
+  - claudemcp.com community directory — submit (manual web flow)
+  - mcp-server.fastn.ai (if active) — submit
   - Tweet from @Declan142 announcing
 - **Documentation** — README has install + tool list. Could add tool-by-tool natural-language query examples (the "Talk to me about X" prompt cookbook for AI agents)
-- **Engine docstring fixes** — three engine docstrings have stale example outputs (BMR, US tax, CA tax) — caught during MCP test fixture sourcing. Fix in calcnook v0.1.1 (won't affect MCP server)
+- **Trusted publisher** (optional, deferred) — 4-field setup at pypi.org/manage/project/calcnook-mcp/settings/publishing if token-based publishing ever becomes friction
 
 ## Future versions
 
+Two paths — pick whichever has less friction at the time:
+
+**Path A — token-direct (current default, used for v0.1.0):**
 ```bash
 # bump version in src/calcnook_mcp/__init__.py + pyproject.toml
-git tag vX.Y.Z
-git push --tags
+python3 -m build
+TWINE_USERNAME=__token__ TWINE_PASSWORD="$(cat ~/.claude/vault/pypi.md | grep -oP 'pypi-[A-Za-z0-9_-]+' | head -1)" \
+  python3 -m twine upload dist/*
+git tag vX.Y.Z && git push origin main vX.Y.Z
 gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."
-# Trusted-publish workflow auto-fires on release (after publisher is configured)
+```
+
+**Path B — trusted publisher (after one-time UI setup):**
+```bash
+# bump version, commit, then:
+git tag vX.Y.Z && git push origin main vX.Y.Z
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."
+# .github/workflows/publish.yml auto-fires on release event
 ```
 
 ## Repos sister to this one
