@@ -1,4 +1,4 @@
-"""calcnook-mcp: MCP server exposing 17 calcnook financial tools over stdio."""
+"""calcnook-mcp: MCP server exposing 20 calcnook financial tools over stdio."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from mcp.server.stdio import stdio_server
 from .tools import core as core_tools
 from .tools import islamic as islamic_tools
 from .tools import countries as country_tools
+from .tools import composite as composite_tools
 from .prompts import PROMPTS, PROMPT_RENDERERS
 from .resources import RESOURCES, RESOURCE_TEMPLATES, read_resource as read_resource_impl
 
@@ -452,6 +453,175 @@ TOOLS: list[types.Tool] = [
                 "currency": {"type": "string", "description": "Echoed currency code (uppercased)."},
             },
             "required": ["formatted", "amount", "currency"],
+        },
+    ),
+    # ------ Composite agentic tools ------
+    types.Tool(
+        name="analyze_salary_offer",
+        description=(
+            "Composite analysis of a single job offer — combines income tax, take-home, "
+            "marginal-bracket estimate, country-aware retirement contribution limits "
+            "(401k for US, EPF cap for India), and monthly savings room into one call. "
+            "Supported countries: us, uk, ca, au, in. Returns pre-formatted display "
+            "strings (lakh/crore for India) plus 2-4 country-aware recommended actions. "
+            "Replaces 4-5 separate tool calls. "
+            "Example queries: 'should I take a ₹15L job in India at age 30 with ₹40k expenses', "
+            "'analyse $80,000 single-filer offer in the US for a 28-year-old', "
+            "'evaluate £55,000 UK salary for a 35-year-old'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "salary": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Gross annual salary in local currency.",
+                },
+                "country": {
+                    "type": "string",
+                    "enum": ["us", "uk", "ca", "au", "in"],
+                    "description": "Country code: us, uk, ca, au, in.",
+                },
+                "age": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Age in whole years (drives 401k catch-up logic for US).",
+                },
+                "filing_status": {
+                    "type": "string",
+                    "enum": ["single", "married_jointly", "married_separately", "head_of_household"],
+                    "default": "single",
+                    "description": "[us] Federal filing status.",
+                },
+                "regime": {
+                    "type": "string",
+                    "enum": ["new", "old"],
+                    "default": "new",
+                    "description": "[in] Indian tax regime.",
+                },
+                "monthly_expenses": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Optional monthly expenses — enables savings_room_monthly computation.",
+                },
+            },
+            "required": ["salary", "country", "age"],
+        },
+    ),
+    types.Tool(
+        name="financial_health_snapshot",
+        description=(
+            "Composite 0-100 financial-health score derived from five inputs: monthly income, "
+            "monthly expenses, total debts, total savings, age. Computes savings rate, "
+            "debt-to-income, emergency-fund months, and retirement-track verdict against a "
+            "Fidelity-style age multiplier (1× at 30, 3× at 40, 6× at 50, 8× at 60, 10× at 67). "
+            "Returns score, verdict (Excellent / Healthy / Needs work / Critical), and 3 "
+            "prioritized recommended actions. "
+            "Example queries: 'snapshot my finances — income ₹2L, expenses 80k, savings 30L, age 35', "
+            "'am I behind on retirement at 50 with $200k saved on $200k income', "
+            "'health check: 100k income, 95k expenses, 5L debt, 1L savings, age 35'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_income": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Monthly take-home or gross income.",
+                },
+                "monthly_expenses": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly recurring expenses.",
+                },
+                "total_debts": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Outstanding debt principal across all loans.",
+                },
+                "total_savings": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Liquid + retirement savings balance.",
+                },
+                "age": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Age in whole years (drives retirement benchmark).",
+                },
+                "monthly_emi": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.0,
+                    "description": "Total monthly EMI / loan repayments — drives DTI ratio.",
+                },
+                "country": {
+                    "type": "string",
+                    "enum": ["us", "uk", "ca", "au", "in"],
+                    "default": "in",
+                    "description": "Country code (used for currency display only).",
+                },
+            },
+            "required": ["monthly_income", "monthly_expenses", "total_debts", "total_savings", "age"],
+        },
+    ),
+    types.Tool(
+        name="compare_loan_options",
+        description=(
+            "Compare 2+ loan options side-by-side: monthly EMI, total interest, total "
+            "payment, and effective tenure (with optional extra monthly payments). Returns "
+            "winner_by_total_payment, winner_by_emi, savings_vs_worst, and a markdown table "
+            "ready for direct LLM rendering. Replaces N separate calculate_loan_payment calls. "
+            "Example queries: 'compare HDFC 8.5% 20y vs SBI 8.4% 15y for a ₹50L home loan', "
+            "'should I add ₹10k extra monthly to my mortgage', "
+            "'three lenders side-by-side for a ₹30L car loan'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "minItems": 2,
+                    "description": "List of loan options to compare. Each must include principal, annual_rate, years; label and extra_monthly are optional.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {
+                                "type": "string",
+                                "description": "Display label (e.g. 'HDFC 8.5% 20y'). Auto-numbered if omitted.",
+                            },
+                            "principal": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "description": "Loan principal.",
+                            },
+                            "annual_rate": {
+                                "type": "number",
+                                "minimum": 0,
+                                "description": "Decimal annual interest rate, e.g. 0.085 for 8.5%.",
+                            },
+                            "years": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Loan tenure in whole years.",
+                            },
+                            "extra_monthly": {
+                                "type": "number",
+                                "minimum": 0,
+                                "default": 0.0,
+                                "description": "Additional monthly payment above EMI — shortens effective tenure.",
+                            },
+                        },
+                        "required": ["principal", "annual_rate", "years"],
+                    },
+                },
+                "include_schedules": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "If true, attaches per-option amortization schedule.",
+                },
+            },
+            "required": ["options"],
         },
     ),
     # ------ Islamic Finance ------
@@ -1135,6 +1305,9 @@ DISPATCH: dict[str, Any] = {
     "calculate_bmi_bmr_tdee": core_tools.tool_bmi_bmr_tdee,
     "convert_currency": core_tools.tool_convert_currency,
     "format_currency_amount": core_tools.tool_format_currency_amount,
+    "analyze_salary_offer": composite_tools.tool_analyze_salary_offer,
+    "financial_health_snapshot": composite_tools.tool_financial_health_snapshot,
+    "compare_loan_options": composite_tools.tool_compare_loan_options,
     "calculate_zakat": islamic_tools.tool_zakat,
     "calculate_islamic_financing": islamic_tools.tool_islamic_financing,
     "calculate_hajj_savings": islamic_tools.tool_hajj_savings,
