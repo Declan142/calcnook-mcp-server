@@ -7,6 +7,8 @@ from typing import Any
 from calcnook.core import compound_interest, periodic_investment, loan_payment, retirement
 from calcnook.core import bmi as bmi_module, currency
 
+from ..live import fx as live_fx
+
 
 def tool_compound_interest(arguments: dict[str, Any]) -> dict[str, Any]:
     """Calculate future value of a lump-sum investment at compound interest."""
@@ -99,14 +101,31 @@ def tool_bmi_bmr_tdee(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_convert_currency(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Convert an amount between currencies using a caller-supplied USD-based rate dict."""
+    """Convert an amount between currencies. Uses caller-supplied rates if given, else live FX."""
+    raw_rates = arguments.get("rates")
+    from_curr = str(arguments["from_currency"]).upper()
+    to_curr = str(arguments["to_currency"]).upper()
+
+    if raw_rates:
+        rates = {str(k).upper(): float(v) for k, v in raw_rates.items()}
+        rates_source = "caller"
+        live_meta: dict[str, Any] = {}
+    else:
+        live = live_fx.get_fx_rates()
+        rates = {str(k).upper(): float(v) for k, v in live["rates"].items()}
+        rates_source = live["source"]
+        live_meta = {"_rates_date": live.get("date"), "_rates_base": live.get("base", "USD")}
+
     result = currency.convert(
         amount=float(arguments["amount"]),
-        from_currency=str(arguments["from_currency"]).upper(),
-        to_currency=str(arguments["to_currency"]).upper(),
-        rates={k: float(v) for k, v in arguments["rates"].items()},
+        from_currency=from_curr,
+        to_currency=to_curr,
+        rates=rates,
     )
-    return result.to_dict()
+    payload = result.to_dict()
+    payload["_rates_source"] = rates_source
+    payload.update(live_meta)
+    return payload
 
 
 def tool_format_currency_amount(arguments: dict[str, Any]) -> dict[str, Any]:

@@ -6,9 +6,38 @@ from typing import Any
 
 from calcnook.core.islamic import zakat, murabaha, ijarah, mudarabah, hajj_savings, halal_screen
 
+from ..live import metals as live_metals
+
+_GOLD_DEFAULT = 75.0
+_SILVER_DEFAULT = 0.90
+
 
 def tool_zakat(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Calculate Zakat al-Mal (annual 2.5% wealth obligation)."""
+    """Calculate Zakat al-Mal. Auto-fetches live gold/silver if caller omits or sends defaults."""
+    currency = str(arguments.get("currency", "USD")).upper()
+    raw_gold = arguments.get("gold_price_per_gram")
+    raw_silver = arguments.get("silver_price_per_gram")
+
+    gold_supplied = raw_gold is not None and float(raw_gold) != _GOLD_DEFAULT
+    silver_supplied = raw_silver is not None and float(raw_silver) != _SILVER_DEFAULT
+
+    sources: dict[str, str] = {}
+    if gold_supplied:
+        gold_price = float(raw_gold)
+        sources["gold"] = "caller"
+    else:
+        gold_live = live_metals.get_gold_price_per_gram(currency)
+        gold_price = float(gold_live["price_per_gram"])
+        sources["gold"] = gold_live["source"]
+
+    if silver_supplied:
+        silver_price = float(raw_silver)
+        sources["silver"] = "caller"
+    else:
+        silver_live = live_metals.get_silver_price_per_gram(currency)
+        silver_price = float(silver_live["price_per_gram"])
+        sources["silver"] = silver_live["source"]
+
     result = zakat.calculate(
         cash=float(arguments.get("cash", 0.0)),
         gold_grams=float(arguments.get("gold_grams", 0.0)),
@@ -17,12 +46,16 @@ def tool_zakat(arguments: dict[str, Any]) -> dict[str, Any]:
         business_assets=float(arguments.get("business_assets", 0.0)),
         other_zakatable_assets=float(arguments.get("other_zakatable_assets", 0.0)),
         debts=float(arguments.get("debts", 0.0)),
-        gold_price_per_gram=float(arguments.get("gold_price_per_gram", 75.0)),
-        silver_price_per_gram=float(arguments.get("silver_price_per_gram", 0.90)),
+        gold_price_per_gram=gold_price,
+        silver_price_per_gram=silver_price,
         nisab_basis=str(arguments.get("nisab_basis", "silver")),
-        currency=str(arguments.get("currency", "USD")),
+        currency=currency,
     )
-    return result.to_dict()
+    payload = result.to_dict()
+    payload["_prices_source"] = sources
+    payload["_gold_price_per_gram"] = gold_price
+    payload["_silver_price_per_gram"] = silver_price
+    return payload
 
 
 def tool_islamic_financing(arguments: dict[str, Any]) -> dict[str, Any]:
