@@ -374,12 +374,13 @@ TOOLS: list[types.Tool] = [
     types.Tool(
         name="convert_currency",
         description=(
-            "Convert an amount between any two currencies using a caller-supplied USD-based rate dict. "
-            "The caller must provide current exchange rates (USD=1.0 base). "
-            "Example: convert 1000 USD to INR with rates={'USD':1.0, 'INR':83.5}. "
-            "Input notes: rates are units-per-USD — INR 83.5 means 1 USD = 83.5 INR. USD must be present (typically 1.0). "
-            "Limitations: no live rate fetching — caller must supply rates dict each call. "
-            "See also: format_currency_amount to render the converted_amount with currency symbol / lakh-crore notation."
+            "Convert an amount between any two currencies. Auto-fetches live USD-base rates from "
+            "Frankfurter (no API key) with 1-hour cache; caller may supply a rates dict to override. "
+            "Returned `_rates_source` indicates whether 'live', 'cached', 'caller', or 'fallback' rates were used. "
+            "Example queries: 'convert 1000 USD to INR', 'how many AED in $5000', 'GBP to JPY 2500'. "
+            "Input notes: when supplying rates, use units-per-USD — INR 83.5 means 1 USD = 83.5 INR; USD must be present (1.0). "
+            "Limitations: 32 fiat currencies via Frankfurter; AED/SAR served from USD-pegged fallback; no crypto. "
+            "See also: format_currency_amount to render the converted_amount with locale-aware symbol/notation."
         ),
         inputSchema={
             "type": "object",
@@ -399,11 +400,11 @@ TOOLS: list[types.Tool] = [
                 },
                 "rates": {
                     "type": "object",
-                    "description": "Dict mapping currency codes to units-per-USD, e.g. {'USD':1.0,'INR':83.5,'EUR':0.93}.",
+                    "description": "Optional dict mapping currency codes to units-per-USD. If omitted, live rates are auto-fetched.",
                     "additionalProperties": {"type": "number"},
                 },
             },
-            "required": ["amount", "from_currency", "to_currency", "rates"],
+            "required": ["amount", "from_currency", "to_currency"],
         },
         outputSchema={
             "type": "object",
@@ -413,6 +414,9 @@ TOOLS: list[types.Tool] = [
                 "to_currency": {"type": "string", "description": "Echoed target currency code."},
                 "rate_used": {"type": "number", "description": "Effective conversion factor applied."},
                 "converted_amount": {"type": "number", "description": "Converted amount in to_currency."},
+                "_rates_source": {"type": "string", "description": "Provenance: 'caller' | 'live' | 'cached' | 'fallback'."},
+                "_rates_date": {"type": "string", "description": "Date of the rates feed (live/cached only)."},
+                "_rates_base": {"type": "string", "description": "Base currency of the rates dict (always 'USD')."},
             },
             "required": ["amount", "from_currency", "to_currency", "rate_used", "converted_amount"],
         },
@@ -468,7 +472,10 @@ TOOLS: list[types.Tool] = [
             "Replaces 4-5 separate tool calls. "
             "Example queries: 'should I take a ₹15L job in India at age 30 with ₹40k expenses', "
             "'analyse $80,000 single-filer offer in the US for a 28-year-old', "
-            "'evaluate £55,000 UK salary for a 35-year-old'."
+            "'evaluate £55,000 UK salary for a 35-year-old'. "
+            "Input notes: salary is GROSS annual in local currency; do NOT pre-deduct standard deduction. monthly_expenses is optional — supply only when savings_room_monthly is wanted. "
+            "Limitations: composite uses tax-deduction headroom for retirement (not actual PF projection — for that use calculate_india_pf_epf separately). UK/CA/AU have null retirement_contribution_max. "
+            "See also: financial_health_snapshot for post-decision affordability check; calculate_india_pf_epf for full India EPF corpus projection over years."
         ),
         inputSchema={
             "type": "object",
@@ -512,46 +519,57 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "gross_annual": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed gross annual salary."
                 },
                 "total_tax": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Total income tax + statutory deductions in local currency."
                 },
                 "take_home_annual": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Net annual after-tax income."
                 },
                 "take_home_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "take_home_annual / 12."
                 },
                 "effective_tax_rate_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "total_tax / gross_annual \u00d7 100."
                 },
                 "marginal_bracket_estimate_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Marginal bracket the salary falls into."
                 },
                 "currency": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "ISO-4217 code derived from country."
                 },
                 "retirement_contribution_max": {
                     "type": [
                         "number",
                         "null"
-                    ]
+                    ],
+                    "description": "Country-aware annual cap (401k for US, EPF tax-deduction ceiling for IN; null elsewhere)."
                 },
                 "savings_room_monthly": {
                     "type": [
                         "number",
                         "null"
-                    ]
+                    ],
+                    "description": "take_home_monthly - monthly_expenses (null when monthly_expenses omitted)."
                 },
                 "recommended_actions": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "description": "2-4 country-aware next-step strings."
                 },
                 "display": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Pre-formatted strings (lakh/crore for INR, $ for USD, etc.)."
                 }
             },
             "required": [
@@ -576,7 +594,10 @@ TOOLS: list[types.Tool] = [
             "prioritized recommended actions. "
             "Example queries: 'snapshot my finances — income ₹2L, expenses 80k, savings 30L, age 35', "
             "'am I behind on retirement at 50 with $200k saved on $200k income', "
-            "'health check: 100k income, 95k expenses, 5L debt, 1L savings, age 35'."
+            "'health check: 100k income, 95k expenses, 5L debt, 1L savings, age 35'. "
+            "Input notes: all monetary fields share ONE currency; total_savings should include retirement accounts; monthly_emi is your actual loan repayment outflow. "
+            "Limitations: retirement benchmark is Fidelity-style age × salary multiplier (US-centric); India users with EPF should add EPF balance to total_savings for fair scoring. "
+            "See also: analyze_salary_offer to compute take-home before this snapshot; calculate_retirement (mode='monthly_contribution_for') to size the SIP needed to catch up."
         ),
         inputSchema={
             "type": "object",
@@ -625,40 +646,51 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "savings_rate_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "(income - expenses) / income * 100."
                 },
                 "debt_to_income_ratio": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "monthly_emi / monthly_income (0-1)."
                 },
                 "emergency_fund_months": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "total_savings / monthly_expenses."
                 },
                 "retirement_track": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "'ahead' | 'on_track' | 'behind' vs Fidelity-style benchmark."
                 },
                 "required_corpus_at_age": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Target corpus for the user's age \u00d7 annual_income."
                 },
                 "actual_savings": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed total_savings."
                 },
                 "score": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "0-100 composite (savings 30, DTI 25, emergency 25, retirement 20)."
                 },
                 "verdict": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "'Excellent' | 'Healthy' | 'Needs work' | 'Critical'."
                 },
                 "recommended_actions": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "description": "3 prioritised next-step strings."
                 },
                 "currency": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "ISO-4217 code derived from country."
                 },
                 "display": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Pre-formatted strings."
                 }
             },
             "required": [
@@ -681,7 +713,10 @@ TOOLS: list[types.Tool] = [
             "ready for direct LLM rendering. Replaces N separate calculate_loan_payment calls. "
             "Example queries: 'compare HDFC 8.5% 20y vs SBI 8.4% 15y for a ₹50L home loan', "
             "'should I add ₹10k extra monthly to my mortgage', "
-            "'three lenders side-by-side for a ₹30L car loan'."
+            "'three lenders side-by-side for a ₹30L car loan'. "
+            "Input notes: annual_rate is decimal (0.085 = 8.5%, NOT 8.5); each option's principal can differ for refi-vs-new comparisons; minimum 2 options. "
+            "Limitations: fixed-rate only — variable/floating-rate loans not supported; assumes constant EMI (no balloon/bullet structures). "
+            "See also: calculate_loan_payment for single-loan EMI with full amortization schedule; calculate_islamic_financing to compare conventional vs Sharia (murabaha)."
         ),
         inputSchema={
             "type": "object",
@@ -734,19 +769,24 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "comparison": {
-                    "type": "array"
+                    "type": "array",
+                    "description": "Per-option dicts: label, monthly_emi, total_interest, total_payment, effective_years."
                 },
                 "winner_by_total_payment": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Label of the cheapest-overall option."
                 },
                 "winner_by_emi": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Label of the lowest-EMI option."
                 },
                 "savings_vs_worst": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Total-payment delta between winner and worst option."
                 },
                 "display_table": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Markdown-formatted side-by-side table for direct LLM rendering."
                 }
             },
             "required": [
@@ -765,10 +805,13 @@ TOOLS: list[types.Tool] = [
             "Compute Zakat al-Mal (annual 2.5% Islamic wealth obligation). "
             "Sums all zakatable assets, deducts debts, checks nisab threshold (gold or silver basis), "
             "and returns the zakat due. Cross-cutting — any Muslim, any country. "
+            "Auto-fetches live gold + silver spot prices when not provided (or when defaults are passed); "
+            "returned `_prices_source` indicates provenance per metal ('gold-api.com'/'cached'/'fallback'). "
             "Example queries: 'how much Zakat do I owe on $25000 savings and $5000 stocks', "
-            "'zakat calculation with gold and silver holdings'. "
-            "Input notes: gold/silver prices must be in the SAME currency as the cash/stocks fields — caller-supplied, not auto-fetched. "
-            "Limitations: standard Hanafi nisab rules; does not handle agricultural zakat (ushr) or livestock (zakat al-an'am). "
+            "'zakat calculation with gold and silver holdings', "
+            "'annual zakat — auto-fetch current gold/silver prices'. "
+            "Input notes: when supplying prices, all monetary values share ONE currency; default basis is silver (lower threshold = more inclusive per Hanafi practice). "
+            "Limitations: standard Hanafi nisab rules; does not model agricultural zakat (ushr) or livestock (zakat al-an'am). "
             "See also: calculate_saudi_zakat_citizen for ZATCA corporate zakat estimation in Saudi Arabia."
         ),
         inputSchema={
@@ -781,8 +824,8 @@ TOOLS: list[types.Tool] = [
                 "business_assets": {"type": "number", "minimum": 0, "default": 0.0, "description": "Business inventory + receivables."},
                 "other_zakatable_assets": {"type": "number", "minimum": 0, "default": 0.0, "description": "Other qualifying assets."},
                 "debts": {"type": "number", "minimum": 0, "default": 0.0, "description": "Outstanding debts owed (deducted from wealth)."},
-                "gold_price_per_gram": {"type": "number", "minimum": 0, "default": 75.0, "description": "Current gold price per gram in the chosen currency."},
-                "silver_price_per_gram": {"type": "number", "minimum": 0, "default": 0.90, "description": "Current silver price per gram."},
+                "gold_price_per_gram": {"type": "number", "minimum": 0, "default": 75.0, "description": "Optional gold price per gram in the chosen currency. If omitted (or default 75.0), live spot is auto-fetched."},
+                "silver_price_per_gram": {"type": "number", "minimum": 0, "default": 0.90, "description": "Optional silver price per gram. If omitted (or default 0.90), live spot is auto-fetched."},
                 "nisab_basis": {"type": "string", "enum": ["gold", "silver"], "default": "silver", "description": "'silver' (lower, more inclusive) or 'gold'."},
                 "currency": {"type": "string", "default": "USD", "description": "ISO-4217 currency code for display."},
             },
@@ -797,6 +840,16 @@ TOOLS: list[types.Tool] = [
                 "is_above_nisab": {"type": "boolean", "description": "True if assets exceed nisab — zakat is due."},
                 "zakat_due": {"type": "number", "description": "Zakat owed (2.5% of total when above nisab; else 0)."},
                 "currency": {"type": "string", "description": "Echoed currency code."},
+                "_prices_source": {
+                    "type": "object",
+                    "description": "Provenance per metal: 'caller' | 'gold-api.com' | 'cached' | 'fallback'.",
+                    "properties": {
+                        "gold": {"type": "string"},
+                        "silver": {"type": "string"},
+                    },
+                },
+                "_gold_price_per_gram": {"type": "number", "description": "Actual gold price used (live or caller)."},
+                "_silver_price_per_gram": {"type": "number", "description": "Actual silver price used (live or caller)."},
             },
             "required": ["total_zakatable_assets", "nisab_threshold_used", "nisab_basis",
                          "is_above_nisab", "zakat_due", "currency"],
@@ -1434,7 +1487,10 @@ TOOLS: list[types.Tool] = [
             "Future-value projects EPF portion at the supplied annual return (default 8%). "
             "Example queries: 'EPF corpus on ₹50K basic over 30 years', "
             "'PF contribution split for ₹25K basic salary', "
-            "'how much EPF will I have at retirement with ₹40K basic and 8.25% return'."
+            "'how much EPF will I have at retirement with ₹40K basic and 8.25% return'. "
+            "Input notes: monthly_basic includes DA (dearness allowance); employee_pct/employer_pct/annual_return are decimals (0.12 = 12%); basic_cap is in ₹ not decimal. "
+            "Limitations: corpus excludes EPS share (defined-benefit pension, not lump-sum); ignores annual EPFO interest-rate revisions; no VPF (Voluntary PF) modelling. "
+            "See also: calculate_india_gratuity for retirement gratuity; calculate_india_advance_tax to plan installments around the EPF deduction."
         ),
         inputSchema={
             "type": "object",
@@ -1480,43 +1536,56 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "monthly_basic": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed monthly basic salary in INR."
                 },
                 "employee_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed employee contribution rate (decimal)."
                 },
                 "employer_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed employer contribution rate (decimal)."
                 },
                 "years": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed projection horizon in years."
                 },
                 "annual_return": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed assumed annual EPF return."
                 },
                 "basic_cap": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed wage ceiling (\u20b915K standard) for employer EPS share."
                 },
                 "employee_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Employee monthly contribution (12% of actual basic)."
                 },
                 "employer_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Total employer monthly contribution (capped basic \u00d7 12%)."
                 },
                 "employer_eps_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Employer's 8.33% share routed to EPS (defined-benefit pension)."
                 },
                 "employer_epf_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Employer's 3.67% share routed to EPF corpus."
                 },
                 "total_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "employee_monthly + employer_monthly."
                 },
                 "corpus_at_retirement": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "FV of employee + employer_epf_monthly compounded at annual_return (excludes EPS)."
                 },
                 "breakdown": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Dict with employee_basis, employer_basis, epf_corpus_basis, monthly_to_epf_corpus, total_invested, wealth_gained."
                 }
             },
             "required": [
@@ -1537,7 +1606,10 @@ TOOLS: list[types.Tool] = [
             "Tax-exempt cap ₹20L per Section 10(10)(ii). "
             "Example queries: 'gratuity for 10 years service at ₹50K basic', "
             "'how much gratuity if I leave after 8.5 years with ₹40K basic + ₹5K DA', "
-            "'tax-exempt gratuity for 30-year service at ₹2L basic'."
+            "'tax-exempt gratuity for 30-year service at ₹2L basic'. "
+            "Input notes: years_of_service is FLOORED to whole years per Sec 4 (8.5 → 8). monthly_basic_salary excludes HRA/special allowance; DA is added separately. "
+            "Limitations: private-sector gratuity formula only (×15/26); does not handle govt/PSU rules (×15/30) or seasonal-establishment variation. ₹20L exempt cap is current; pre-2019 cap was ₹10L. "
+            "See also: calculate_india_pf_epf for full retirement-corpus picture; calculate_eosg for UAE/Saudi end-of-service equivalents."
         ),
         inputSchema={
             "type": "object",
@@ -1565,28 +1637,36 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "monthly_basic_salary": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed last-drawn monthly basic in INR."
                 },
                 "dearness_allowance": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed monthly DA in INR."
                 },
                 "years_of_service_input": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed raw years_of_service argument."
                 },
                 "years_of_service_used": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Floored integer years per Sec 4 PoG Act."
                 },
                 "gratuity_gross": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "(15 \u00d7 (basic+DA) \u00d7 floored_years) / 26 \u2014 the statutory amount."
                 },
                 "exempt_amount": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Tax-exempt portion (lesser of gross and \u20b920L cap per Sec 10(10)(ii))."
                 },
                 "taxable_amount": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "gratuity_gross - exempt_amount (taxed at slab rate)."
                 },
                 "formula_breakdown": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Dict explaining the (15 \u00d7 wage \u00d7 years / 26) computation step by step."
                 }
             },
             "required": [
@@ -1606,7 +1686,10 @@ TOOLS: list[types.Tool] = [
             "unlisted_equity (LTCG 12.5%), gold (LTCG 12.5%/20%), crypto (flat 30%, Sec 115BBH). "
             "Example queries: 'LTCG tax on equity sold after 2 years for ₹3.5L (purchased ₹2L)', "
             "'capital gains on flat sold for ₹80L purchased ₹50L 5 years ago', "
-            "'crypto gains tax on ₹2L profit'."
+            "'crypto gains tax on ₹2L profit'. "
+            "Input notes: dates as ISO YYYY-MM-DD strings; indexation flag relevant only for property/gold purchased before 23 Jul 2024; debt_mf returns tax_payable=null (slab-rate, depends on personal income). "
+            "Limitations: surcharge + 4% cess NOT auto-added (returned as note); no grandfathering for pre-Jan-2018 equity (Sec 112A); no specific-bond LTCG exemptions (Sec 54EC etc.). "
+            "See also: calculate_income_tax (country='in') for slab-rate liability on debt_mf gains; calculate_india_advance_tax to schedule installments after a realised gain."
         ),
         inputSchema={
             "type": "object",
@@ -1650,67 +1733,84 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "asset_type": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed asset class."
                 },
                 "asset_subtype": {
                     "type": [
                         "string",
                         "null"
-                    ]
+                    ],
+                    "description": "Echoed informational tag (or null)."
                 },
                 "purchase_price": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed acquisition cost in INR."
                 },
                 "sale_price": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed sale consideration in INR."
                 },
                 "purchase_date": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed ISO date of acquisition."
                 },
                 "sale_date": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed ISO date of sale."
                 },
                 "holding_period_days": {
-                    "type": "integer"
+                    "type": "integer",
+                    "description": "Days between purchase and sale."
                 },
                 "holding_period_years": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Decimal years (days / 365.25)."
                 },
                 "classification": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "'STCG' or 'LTCG' based on holding-period thresholds for asset_type."
                 },
                 "gain_amount": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "sale_price - purchase_price (negative = loss)."
                 },
                 "exemption_used": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Annual exemption applied (\u20b91.25L for equity LTCG, else 0)."
                 },
                 "taxable_gain": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "gain_amount - exemption_used."
                 },
                 "tax_payable": {
                     "type": [
                         "number",
                         "null"
-                    ]
+                    ],
+                    "description": "Computed tax in INR (null when slab-rate applies \u2014 debt_mf, property STCG, etc.)."
                 },
                 "indexation_used": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "True if 20%-with-index path was applied (property/gold pre-23-Jul-2024)."
                 },
                 "applicable_rate": {
                     "type": [
                         "number",
                         "null"
-                    ]
+                    ],
+                    "description": "Decimal rate applied (0.125 = 12.5%, etc.). Null when slab."
                 },
                 "surcharge_cess_note": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Reminder that surcharge (10/15/25/37%) and 4% cess are NOT included."
                 },
                 "note": {
                     "type": [
                         "string",
                         "null"
-                    ]
+                    ],
+                    "description": "Optional explanatory string (e.g. for crypto Sec 115BBH, debt MF Sec 50AA)."
                 }
             },
             "required": [
@@ -1731,7 +1831,10 @@ TOOLS: list[types.Tool] = [
             "Total tax computed via India income_tax (new/old regime) unless ``total_tax_for_year`` overrides. "
             "Example queries: 'next advance tax instalment due on income ₹25L', "
             "'how much advance tax to pay by Sep 15 on ₹40L income', "
-            "'advance tax schedule for FY 2025-26 with ₹15L income already paid ₹50K'."
+            "'advance tax schedule for FY 2025-26 with ₹15L income already paid ₹50K'. "
+            "Input notes: as_of_date is ISO YYYY-MM-DD; total_tax_for_year overrides the auto-computed liability when caller has a more accurate figure (e.g. with deductions). Sec 208 trigger: total liability ≤ ₹10K = no advance tax due. "
+            "Limitations: assumes income remains constant through the year; does not handle quarterly income revisions; ignores TDS/TCS already deducted (subtract from paid_so_far). "
+            "See also: calculate_income_tax (country='in') for the underlying tax calculation; calculate_india_capital_gains to add realised gains to annual_income."
         ),
         inputSchema={
             "type": "object",
@@ -1769,43 +1872,54 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "annual_income": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed annual income in INR."
                 },
                 "regime": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed tax regime ('new' or 'old')."
                 },
                 "total_tax_estimated": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Total annual tax liability used for the schedule."
                 },
                 "paid_so_far": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed amount already paid against this year's liability."
                 },
                 "as_of_date": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed reference date."
                 },
                 "current_quarter": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "'Q1' | 'Q2' | 'Q3' | 'Q4' | 'completed'."
                 },
                 "next_due_date": {
                     "type": [
                         "string",
                         "null"
-                    ]
+                    ],
+                    "description": "ISO date of the next installment deadline (or null if year completed)."
                 },
                 "next_installment_required_cumulative": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Cumulative % of total_tax_estimated due by next_due_date."
                 },
                 "next_installment_due_now": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Amount to pay now (cumulative_required - paid_so_far, floored at 0)."
                 },
                 "all_installments": {
-                    "type": "array"
+                    "type": "array",
+                    "description": "List of all 4 quarterly installments with due_date + cumulative_pct + amount."
                 },
                 "note": {
                     "type": [
                         "string",
                         "null"
-                    ]
+                    ],
+                    "description": "Optional message (e.g. 'No advance tax due \u2014 Sec 208 trigger \u2264 \u20b910K')."
                 }
             },
             "required": [
@@ -1824,7 +1938,10 @@ TOOLS: list[types.Tool] = [
             "Set is_inclusive=true if amount already includes GST (extracts the base). "
             "Example queries: 'GST on ₹1000 product at 18% intra-state', "
             "'extract base price from ₹1180 inclusive of 18% GST', "
-            "'IGST on ₹50000 inter-state invoice at 28%'."
+            "'IGST on ₹50000 inter-state invoice at 28%'. "
+            "Input notes: rate auto-detects format — 18 OR 0.18 both valid; valid rates strictly {0, 5, 12, 18, 28} (% or decimal); breakup determines which fields populate (cgst+sgst zero igst, or vice versa). "
+            "Limitations: GST Compensation Cess (luxury/sin goods) NOT modelled; reverse-charge (RCM) treated as standard outward; no e-invoicing IRN/QR generation. "
+            "See also: format_currency_amount with currency='INR' to render the GST/total in lakh notation."
         ),
         inputSchema={
             "type": "object",
@@ -1857,31 +1974,40 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "base": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Pre-GST amount (extracted if is_inclusive=true, else echoed input)."
                 },
                 "gst_total": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Total GST in INR (cgst+sgst OR igst, depending on breakup)."
                 },
                 "total": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "base + gst_total."
                 },
                 "cgst": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Central GST (half of gst_total when intra-state, else 0)."
                 },
                 "sgst": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "State GST (half of gst_total when intra-state, else 0)."
                 },
                 "igst": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Integrated GST (full gst_total when inter-state, else 0)."
                 },
                 "rate_pct": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Applied rate in percent (5/12/18/28)."
                 },
                 "breakup": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Echoed 'cgst_sgst' or 'igst'."
                 },
                 "is_inclusive": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "Echoed input flag."
                 }
             },
             "required": [
@@ -1903,7 +2029,10 @@ TOOLS: list[types.Tool] = [
             "Available only under the OLD regime — Sec 115BAC disallows HRA in the new regime. "
             "Example queries: 'HRA exemption for ₹50K basic, ₹20K HRA, ₹18K rent in Mumbai', "
             "'taxable HRA for ₹40K basic, ₹15K HRA, ₹10K rent in Pune', "
-            "'HRA exemption for ₹1L basic, ₹40K HRA, ₹35K rent Bangalore non-metro'."
+            "'HRA exemption for ₹1L basic, ₹40K HRA, ₹35K rent Bangalore non-metro'. "
+            "Input notes: all monetary inputs are MONTHLY (multiply by 12 for annual figures); is_metro=true ONLY for Mumbai/Delhi/Kolkata/Chennai per CBDT clarification (Bangalore/Hyderabad are non-metro for HRA). "
+            "Limitations: HRA exemption is OLD-regime only — new regime (Sec 115BAC) disallows it entirely. Self-occupied home rent ignored. "
+            "See also: calculate_income_tax (country='in', regime='old') to apply this exemption to taxable income; analyze_salary_offer for full take-home with HRA factored in."
         ),
         inputSchema={
             "type": "object",
@@ -1934,31 +2063,40 @@ TOOLS: list[types.Tool] = [
             "type": "object",
             "properties": {
                 "basic_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed monthly basic in INR."
                 },
                 "hra_received_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed monthly HRA received."
                 },
                 "rent_paid_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "Echoed monthly rent paid."
                 },
                 "is_metro": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "Echoed metro flag."
                 },
                 "exempt_monthly": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "MIN of (actual HRA, rent - 10% basic, 50%/40% basic)."
                 },
                 "exempt_annual": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "exempt_monthly \u00d7 12."
                 },
                 "hra_received_annual": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "hra_received_monthly \u00d7 12."
                 },
                 "taxable_hra_annual": {
-                    "type": "number"
+                    "type": "number",
+                    "description": "hra_received_annual - exempt_annual."
                 },
                 "breakdown": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Dict with all 3 candidate values + which one was the binding minimum."
                 }
             },
             "required": [
