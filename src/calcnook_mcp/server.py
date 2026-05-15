@@ -1,4 +1,4 @@
-"""calcnook-mcp: MCP server exposing 20 calcnook financial tools over stdio."""
+"""calcnook-mcp: MCP server exposing 26 calcnook financial tools + 5 prompts + 4 resources over stdio."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from .tools import core as core_tools
 from .tools import islamic as islamic_tools
 from .tools import countries as country_tools
 from .tools import composite as composite_tools
+from .tools import india_deep as india_deep_tools
 from .prompts import PROMPTS, PROMPT_RENDERERS
 from .resources import RESOURCES, RESOURCE_TEMPLATES, read_resource as read_resource_impl
 
@@ -1291,6 +1292,260 @@ TOOLS: list[types.Tool] = [
                          "electricity_duty", "total_bill", "slab_breakdown"],
         },
     ),
+    # ------ India deep (v0.2.0) ------
+    types.Tool(
+        name="calculate_india_pf_epf",
+        description=(
+            "Compute India PF/EPF monthly contributions and projected retirement corpus. "
+            "Splits employer's 12% per EPFO rules: 8.33% to EPS (capped at ₹15K basic), 3.67% to EPF. "
+            "Future-value projects EPF portion at the supplied annual return (default 8%). "
+            "Example queries: 'EPF corpus on ₹50K basic over 30 years', "
+            "'PF contribution split for ₹25K basic salary', "
+            "'how much EPF will I have at retirement with ₹40K basic and 8.25% return'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_basic": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly basic salary (incl. DA) in INR.",
+                },
+                "years": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Years until withdrawal / retirement.",
+                },
+                "employee_pct": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.12,
+                    "description": "Employee contribution as decimal of basic. Default 0.12 (12%).",
+                },
+                "employer_pct": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.12,
+                    "description": "Employer contribution as decimal of basic. Default 0.12 (12%).",
+                },
+                "annual_return": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.08,
+                    "description": "Decimal annual EPF return, e.g. 0.0825 for 8.25%. Default 0.08.",
+                },
+                "basic_cap": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 15000.0,
+                    "description": "Wage ceiling for employer EPS share in INR. Default ₹15,000 (EPFO 2014).",
+                },
+            },
+            "required": ["monthly_basic", "years"],
+        },
+    ),
+    types.Tool(
+        name="calculate_india_gratuity",
+        description=(
+            "Compute India statutory gratuity under the Payment of Gratuity Act, 1972. "
+            "Formula: (15 × (basic + DA) × floor(years_of_service)) / 26. "
+            "Tax-exempt cap ₹20L per Section 10(10)(ii). "
+            "Example queries: 'gratuity for 10 years service at ₹50K basic', "
+            "'how much gratuity if I leave after 8.5 years with ₹40K basic + ₹5K DA', "
+            "'tax-exempt gratuity for 30-year service at ₹2L basic'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_basic_salary": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Last-drawn monthly basic salary in INR.",
+                },
+                "years_of_service": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Total years of continuous service (floored to whole years per Sec 4).",
+                },
+                "dearness_allowance": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.0,
+                    "description": "Last-drawn monthly dearness allowance in INR (added to basic).",
+                },
+            },
+            "required": ["monthly_basic_salary", "years_of_service"],
+        },
+    ),
+    types.Tool(
+        name="calculate_india_capital_gains",
+        description=(
+            "Compute India capital-gains tax under Budget 2024 framework (FY 2024-25 onwards). "
+            "Asset types: equity_listed (LTCG 12.5% above ₹1.25L exemption / STCG 20%), "
+            "debt_mf (slab rate, Sec 50AA), property (LTCG 12.5% no-index OR 20% with-index), "
+            "unlisted_equity (LTCG 12.5%), gold (LTCG 12.5%/20%), crypto (flat 30%, Sec 115BBH). "
+            "Example queries: 'LTCG tax on equity sold after 2 years for ₹3.5L (purchased ₹2L)', "
+            "'capital gains on flat sold for ₹80L purchased ₹50L 5 years ago', "
+            "'crypto gains tax on ₹2L profit'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "asset_type": {
+                    "type": "string",
+                    "enum": ["equity_listed", "debt_mf", "property", "unlisted_equity", "gold", "crypto"],
+                    "description": "Asset class — determines holding-period thresholds and applicable rate.",
+                },
+                "purchase_price": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Acquisition cost in INR.",
+                },
+                "sale_price": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Realised sale consideration in INR.",
+                },
+                "purchase_date": {
+                    "type": "string",
+                    "description": "Date of acquisition in ISO YYYY-MM-DD format.",
+                },
+                "sale_date": {
+                    "type": "string",
+                    "description": "Date of sale in ISO YYYY-MM-DD format.",
+                },
+                "indexation": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "If True and asset is property/gold, apply 20% LTCG with indexation (taxpayer choice for assets acquired before 23 Jul 2024).",
+                },
+                "asset_subtype": {
+                    "type": "string",
+                    "description": "Optional informational tag (e.g. 'house', 'land', 'physical_gold', 'sgb').",
+                },
+            },
+            "required": ["asset_type", "purchase_price", "sale_price", "purchase_date", "sale_date"],
+        },
+    ),
+    types.Tool(
+        name="calculate_india_advance_tax",
+        description=(
+            "Compute India advance-tax instalment due under Section 211 (FY 2024-25 schedule). "
+            "Returns next due date and amount based on cumulative percentages: "
+            "15% by Jun 15 (Q1), 45% by Sep 15 (Q2), 75% by Dec 15 (Q3), 100% by Mar 15 (Q4). "
+            "Total tax computed via India income_tax (new/old regime) unless ``total_tax_for_year`` overrides. "
+            "Example queries: 'next advance tax instalment due on income ₹25L', "
+            "'how much advance tax to pay by Sep 15 on ₹40L income', "
+            "'advance tax schedule for FY 2025-26 with ₹15L income already paid ₹50K'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "annual_income": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Estimated gross annual income for the FY in INR.",
+                },
+                "regime": {
+                    "type": "string",
+                    "enum": ["new", "old"],
+                    "default": "new",
+                    "description": "Tax regime: 'new' (default) or 'old'.",
+                },
+                "paid_so_far": {
+                    "type": "number",
+                    "minimum": 0,
+                    "default": 0.0,
+                    "description": "Total advance tax already paid this FY in INR.",
+                },
+                "as_of_date": {
+                    "type": "string",
+                    "description": "Reference date in ISO YYYY-MM-DD. Defaults to today if omitted.",
+                },
+                "total_tax_for_year": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Optional caller-precomputed total annual tax (overrides income_tax engine call).",
+                },
+            },
+            "required": ["annual_income"],
+        },
+    ),
+    types.Tool(
+        name="calculate_india_gst",
+        description=(
+            "Compute India GST (CGST/SGST/IGST) on a transaction. Permitted slabs: 0/5/12/18/28%. "
+            "Rate accepted as decimal (0.18) or percent (18.0); auto-detected. "
+            "Use breakup='cgst_sgst' for intra-state (split half-half) or 'igst' for inter-state (full). "
+            "Set is_inclusive=true if amount already includes GST (extracts the base). "
+            "Example queries: 'GST on ₹1000 product at 18% intra-state', "
+            "'extract base price from ₹1180 inclusive of 18% GST', "
+            "'IGST on ₹50000 inter-state invoice at 28%'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monetary amount in INR (ex-tax if is_inclusive=false; gross if true).",
+                },
+                "rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "GST rate. Decimal (0.18) or percent (18.0). Must equal one of {0, 5, 12, 18, 28}%.",
+                },
+                "is_inclusive": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "If true, amount already includes GST and base is extracted. Default false.",
+                },
+                "breakup": {
+                    "type": "string",
+                    "enum": ["cgst_sgst", "igst"],
+                    "default": "cgst_sgst",
+                    "description": "'cgst_sgst' for intra-state (half-half) or 'igst' for inter-state (full).",
+                },
+            },
+            "required": ["amount", "rate"],
+        },
+    ),
+    types.Tool(
+        name="calculate_india_hra_exemption",
+        description=(
+            "Compute India HRA exemption under Section 10(13A) / Rule 2A. "
+            "Exempt monthly = MIN of (actual HRA, rent − 10% basic, 50% basic if metro else 40% basic). "
+            "Available only under the OLD regime — Sec 115BAC disallows HRA in the new regime. "
+            "Example queries: 'HRA exemption for ₹50K basic, ₹20K HRA, ₹18K rent in Mumbai', "
+            "'taxable HRA for ₹40K basic, ₹15K HRA, ₹10K rent in Pune', "
+            "'HRA exemption for ₹1L basic, ₹40K HRA, ₹35K rent Bangalore non-metro'."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "basic_monthly": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly basic salary in INR (incl. DA forming part of retirement benefits).",
+                },
+                "hra_received_monthly": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Monthly HRA received from employer in INR.",
+                },
+                "rent_paid_monthly": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Actual monthly rent paid in INR.",
+                },
+                "is_metro": {
+                    "type": "boolean",
+                    "description": "True if residence is in Mumbai/Delhi/Kolkata/Chennai (Sec 10(13A) classical metros), false otherwise.",
+                },
+            },
+            "required": ["basic_monthly", "hra_received_monthly", "rent_paid_monthly", "is_metro"],
+        },
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -1318,6 +1573,13 @@ DISPATCH: dict[str, Any] = {
     "calculate_vat": country_tools.tool_vat,
     "calculate_saudi_zakat_citizen": country_tools.tool_saudi_zakat_citizen,
     "calculate_india_electricity_bill": country_tools.tool_india_electricity_bill,
+    # India deep (v0.2.0)
+    "calculate_india_pf_epf": india_deep_tools.tool_india_pf_epf,
+    "calculate_india_gratuity": india_deep_tools.tool_india_gratuity,
+    "calculate_india_capital_gains": india_deep_tools.tool_india_capital_gains,
+    "calculate_india_advance_tax": india_deep_tools.tool_india_advance_tax,
+    "calculate_india_gst": india_deep_tools.tool_india_gst,
+    "calculate_india_hra_exemption": india_deep_tools.tool_india_hra_exemption,
 }
 
 # ---------------------------------------------------------------------------

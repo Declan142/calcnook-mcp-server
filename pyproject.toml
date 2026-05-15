@@ -12,6 +12,7 @@ authors = [{ name = "Aditya Sharma", email = "wickedrita@gmail.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0",
+    # TODO: bump to >=0.2.0 after engine publish (adds 6 India deep calcs)
     "calcnook>=0.1.0",
 ]
 classifiers = [

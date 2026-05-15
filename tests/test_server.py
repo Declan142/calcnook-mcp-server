@@ -7,11 +7,11 @@ import pytest
 from calcnook_mcp.server import TOOLS, DISPATCH
 
 
-EXPECTED_TOOL_COUNT = 20
+EXPECTED_TOOL_COUNT = 26
 
 
 def test_tool_count() -> None:
-    """Server must expose exactly 20 tools (17 atomic + 3 composite agentic)."""
+    """Server must expose exactly 26 tools (17 atomic + 3 composite + 6 India deep)."""
     assert len(TOOLS) == EXPECTED_TOOL_COUNT, (
         f"Expected {EXPECTED_TOOL_COUNT} tools, got {len(TOOLS)}: "
         f"{[t.name for t in TOOLS]}"
