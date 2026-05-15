@@ -508,6 +508,62 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["salary", "country", "age"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "gross_annual": {
+                    "type": "number"
+                },
+                "total_tax": {
+                    "type": "number"
+                },
+                "take_home_annual": {
+                    "type": "number"
+                },
+                "take_home_monthly": {
+                    "type": "number"
+                },
+                "effective_tax_rate_pct": {
+                    "type": "number"
+                },
+                "marginal_bracket_estimate_pct": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "retirement_contribution_max": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "savings_room_monthly": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "recommended_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "display": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "gross_annual",
+                "total_tax",
+                "take_home_annual",
+                "take_home_monthly",
+                "currency",
+                "recommended_actions",
+                "display"
+            ]
+        },
     ),
     types.Tool(
         name="financial_health_snapshot",
@@ -564,6 +620,56 @@ TOOLS: list[types.Tool] = [
                 },
             },
             "required": ["monthly_income", "monthly_expenses", "total_debts", "total_savings", "age"],
+        },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "savings_rate_pct": {
+                    "type": "number"
+                },
+                "debt_to_income_ratio": {
+                    "type": "number"
+                },
+                "emergency_fund_months": {
+                    "type": "number"
+                },
+                "retirement_track": {
+                    "type": "string"
+                },
+                "required_corpus_at_age": {
+                    "type": "number"
+                },
+                "actual_savings": {
+                    "type": "number"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "verdict": {
+                    "type": "string"
+                },
+                "recommended_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "display": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "savings_rate_pct",
+                "debt_to_income_ratio",
+                "emergency_fund_months",
+                "retirement_track",
+                "score",
+                "verdict",
+                "recommended_actions"
+            ]
         },
     ),
     types.Tool(
@@ -623,6 +729,33 @@ TOOLS: list[types.Tool] = [
                 },
             },
             "required": ["options"],
+        },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "comparison": {
+                    "type": "array"
+                },
+                "winner_by_total_payment": {
+                    "type": "string"
+                },
+                "winner_by_emi": {
+                    "type": "string"
+                },
+                "savings_vs_worst": {
+                    "type": "number"
+                },
+                "display_table": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "comparison",
+                "winner_by_total_payment",
+                "winner_by_emi",
+                "savings_vs_worst",
+                "display_table"
+            ]
         },
     ),
     # ------ Islamic Finance ------
@@ -1343,6 +1476,58 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["monthly_basic", "years"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_basic": {
+                    "type": "number"
+                },
+                "employee_pct": {
+                    "type": "number"
+                },
+                "employer_pct": {
+                    "type": "number"
+                },
+                "years": {
+                    "type": "number"
+                },
+                "annual_return": {
+                    "type": "number"
+                },
+                "basic_cap": {
+                    "type": "number"
+                },
+                "employee_monthly": {
+                    "type": "number"
+                },
+                "employer_monthly": {
+                    "type": "number"
+                },
+                "employer_eps_monthly": {
+                    "type": "number"
+                },
+                "employer_epf_monthly": {
+                    "type": "number"
+                },
+                "total_monthly": {
+                    "type": "number"
+                },
+                "corpus_at_retirement": {
+                    "type": "number"
+                },
+                "breakdown": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "employee_monthly",
+                "employer_monthly",
+                "employer_eps_monthly",
+                "employer_epf_monthly",
+                "total_monthly",
+                "corpus_at_retirement"
+            ]
+        },
     ),
     types.Tool(
         name="calculate_india_gratuity",
@@ -1375,6 +1560,41 @@ TOOLS: list[types.Tool] = [
                 },
             },
             "required": ["monthly_basic_salary", "years_of_service"],
+        },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_basic_salary": {
+                    "type": "number"
+                },
+                "dearness_allowance": {
+                    "type": "number"
+                },
+                "years_of_service_input": {
+                    "type": "number"
+                },
+                "years_of_service_used": {
+                    "type": "integer"
+                },
+                "gratuity_gross": {
+                    "type": "number"
+                },
+                "exempt_amount": {
+                    "type": "number"
+                },
+                "taxable_amount": {
+                    "type": "number"
+                },
+                "formula_breakdown": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "gratuity_gross",
+                "exempt_amount",
+                "taxable_amount",
+                "years_of_service_used"
+            ]
         },
     ),
     types.Tool(
@@ -1426,6 +1646,81 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["asset_type", "purchase_price", "sale_price", "purchase_date", "sale_date"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "asset_type": {
+                    "type": "string"
+                },
+                "asset_subtype": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "purchase_price": {
+                    "type": "number"
+                },
+                "sale_price": {
+                    "type": "number"
+                },
+                "purchase_date": {
+                    "type": "string"
+                },
+                "sale_date": {
+                    "type": "string"
+                },
+                "holding_period_days": {
+                    "type": "integer"
+                },
+                "holding_period_years": {
+                    "type": "number"
+                },
+                "classification": {
+                    "type": "string"
+                },
+                "gain_amount": {
+                    "type": "number"
+                },
+                "exemption_used": {
+                    "type": "number"
+                },
+                "taxable_gain": {
+                    "type": "number"
+                },
+                "tax_payable": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "indexation_used": {
+                    "type": "boolean"
+                },
+                "applicable_rate": {
+                    "type": [
+                        "number",
+                        "null"
+                    ]
+                },
+                "surcharge_cess_note": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                }
+            },
+            "required": [
+                "asset_type",
+                "classification",
+                "gain_amount",
+                "taxable_gain",
+                "holding_period_years"
+            ]
+        },
     ),
     types.Tool(
         name="calculate_india_advance_tax",
@@ -1470,6 +1765,55 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["annual_income"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "annual_income": {
+                    "type": "number"
+                },
+                "regime": {
+                    "type": "string"
+                },
+                "total_tax_estimated": {
+                    "type": "number"
+                },
+                "paid_so_far": {
+                    "type": "number"
+                },
+                "as_of_date": {
+                    "type": "string"
+                },
+                "current_quarter": {
+                    "type": "string"
+                },
+                "next_due_date": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "next_installment_required_cumulative": {
+                    "type": "number"
+                },
+                "next_installment_due_now": {
+                    "type": "number"
+                },
+                "all_installments": {
+                    "type": "array"
+                },
+                "note": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                }
+            },
+            "required": [
+                "total_tax_estimated",
+                "current_quarter",
+                "all_installments"
+            ]
+        },
     ),
     types.Tool(
         name="calculate_india_gst",
@@ -1509,6 +1853,47 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["amount", "rate"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "base": {
+                    "type": "number"
+                },
+                "gst_total": {
+                    "type": "number"
+                },
+                "total": {
+                    "type": "number"
+                },
+                "cgst": {
+                    "type": "number"
+                },
+                "sgst": {
+                    "type": "number"
+                },
+                "igst": {
+                    "type": "number"
+                },
+                "rate_pct": {
+                    "type": "number"
+                },
+                "breakup": {
+                    "type": "string"
+                },
+                "is_inclusive": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "base",
+                "gst_total",
+                "total",
+                "cgst",
+                "sgst",
+                "igst",
+                "rate_pct"
+            ]
+        },
     ),
     types.Tool(
         name="calculate_india_hra_exemption",
@@ -1544,6 +1929,43 @@ TOOLS: list[types.Tool] = [
                 },
             },
             "required": ["basic_monthly", "hra_received_monthly", "rent_paid_monthly", "is_metro"],
+        },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "basic_monthly": {
+                    "type": "number"
+                },
+                "hra_received_monthly": {
+                    "type": "number"
+                },
+                "rent_paid_monthly": {
+                    "type": "number"
+                },
+                "is_metro": {
+                    "type": "boolean"
+                },
+                "exempt_monthly": {
+                    "type": "number"
+                },
+                "exempt_annual": {
+                    "type": "number"
+                },
+                "hra_received_annual": {
+                    "type": "number"
+                },
+                "taxable_hra_annual": {
+                    "type": "number"
+                },
+                "breakdown": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "exempt_monthly",
+                "exempt_annual",
+                "taxable_hra_annual"
+            ]
         },
     ),
 ]

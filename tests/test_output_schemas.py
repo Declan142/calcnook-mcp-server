@@ -153,6 +153,41 @@ TOOL_INPUTS: dict[str, dict[str, Any]] = {
         "fixed_charges": 50, "fuel_surcharge_per_unit": 0.5,
         "electricity_duty_percent": 6,
     },
+    "analyze_salary_offer": {
+        "salary": 1500000, "country": "in", "age": 30,
+        "regime": "new", "monthly_expenses": 40000,
+    },
+    "financial_health_snapshot": {
+        "monthly_income": 100000, "monthly_expenses": 60000,
+        "total_debts": 500000, "total_savings": 800000,
+        "age": 35, "monthly_emi": 25000,
+    },
+    "compare_loan_options": {
+        "options": [
+            {"label": "Bank A", "principal": 3000000, "annual_rate": 0.085, "years": 20},
+            {"label": "Bank B", "principal": 3000000, "annual_rate": 0.090, "years": 15},
+        ],
+    },
+    "calculate_india_pf_epf": {
+        "monthly_basic": 50000, "years": 30,
+    },
+    "calculate_india_gratuity": {
+        "monthly_basic_salary": 50000, "years_of_service": 10,
+    },
+    "calculate_india_capital_gains": {
+        "asset_type": "equity_listed", "purchase_price": 200000, "sale_price": 350000,
+        "purchase_date": "2022-01-15", "sale_date": "2024-08-20",
+    },
+    "calculate_india_advance_tax": {
+        "annual_income": 2500000, "regime": "new", "as_of_date": "2025-08-01",
+    },
+    "calculate_india_gst": {
+        "amount": 1000, "rate": 18, "is_inclusive": False, "breakup": "cgst_sgst",
+    },
+    "calculate_india_hra_exemption": {
+        "basic_monthly": 50000, "hra_received_monthly": 20000,
+        "rent_paid_monthly": 18000, "is_metro": True,
+    },
 }
 
 
