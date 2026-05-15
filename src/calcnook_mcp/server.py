@@ -15,6 +15,8 @@ from mcp.server.stdio import stdio_server
 from .tools import core as core_tools
 from .tools import islamic as islamic_tools
 from .tools import countries as country_tools
+from .prompts import PROMPTS, PROMPT_RENDERERS
+from .resources import RESOURCES, RESOURCE_TEMPLATES, read_resource as read_resource_impl
 
 logger = logging.getLogger(__name__)
 
@@ -1180,6 +1182,48 @@ async def call_tool(
             type="text",
             text=json.dumps({"error": str(exc)}),
         )]
+
+
+# ---------------------------------------------------------------------------
+# Prompts (5)
+# ---------------------------------------------------------------------------
+
+
+@server.list_prompts()
+async def list_prompts() -> list[types.Prompt]:
+    """Return all registered calcnook prompts (slash-command discovery)."""
+    return PROMPTS
+
+
+@server.get_prompt()
+async def get_prompt(name: str, arguments: dict[str, Any] | None) -> types.GetPromptResult:
+    """Render a registered prompt with caller-supplied arguments templated inline."""
+    if name not in PROMPT_RENDERERS:
+        raise ValueError(f"unknown prompt: {name}")
+    return PROMPT_RENDERERS[name](arguments or {})
+
+
+# ---------------------------------------------------------------------------
+# Resources (4 + 2 templates)
+# ---------------------------------------------------------------------------
+
+
+@server.list_resources()
+async def list_resources() -> list[types.Resource]:
+    """Return all registered calcnook resources (LLM context fetch surface)."""
+    return RESOURCES
+
+
+@server.list_resource_templates()
+async def list_resource_templates() -> list[types.ResourceTemplate]:
+    """Return parameterised resource templates (tax-brackets, discom-rates)."""
+    return RESOURCE_TEMPLATES
+
+
+@server.read_resource()
+async def read_resource(uri: Any) -> Any:
+    """Dispatch a `calcnook://...` URI to the resources module."""
+    return await read_resource_impl(uri)
 
 
 # ---------------------------------------------------------------------------
