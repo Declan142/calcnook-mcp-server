@@ -30,7 +30,10 @@ TOOLS: list[types.Tool] = [
             "Compute the future value of a single lump-sum investment at compound interest. "
             "Universal — no country specifics. "
             "Example queries: 'What will ₹1L grow to in 10 years at 7%?', "
-            "'future value of $5000 invested at 8% annually for 20 years compounded monthly'."
+            "'future value of $5000 invested at 8% annually for 20 years compounded monthly'. "
+            "Input notes: annual_rate is decimal — 0.07 = 7%, NOT 7.0. "
+            "Limitations: single lump-sum only — for periodic contributions use calculate_sip_dca. "
+            "See also: calculate_sip_dca for monthly contributions vs lump-sum."
         ),
         inputSchema={
             "type": "object",
@@ -58,6 +61,18 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["principal", "annual_rate", "years"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "principal": {"type": "number", "description": "Echoed initial deposit."},
+                "future_value": {"type": "number", "description": "Final amount after compounding."},
+                "interest_earned": {"type": "number", "description": "future_value - principal."},
+                "annual_rate": {"type": "number", "description": "Echoed decimal annual rate."},
+                "years": {"type": "number", "description": "Echoed time horizon."},
+                "compounding_per_year": {"type": "integer", "description": "Echoed compounding frequency."},
+            },
+            "required": ["principal", "future_value", "interest_earned", "annual_rate", "years", "compounding_per_year"],
+        },
     ),
     types.Tool(
         name="calculate_sip_dca",
@@ -67,7 +82,10 @@ TOOLS: list[types.Tool] = [
             "Example queries: 'SIP ₹5000/month for 15 years at 12%', "
             "'how much SIP to reach 1 crore in 10 years', "
             "'DCA $500/month into index fund for 30 years', "
-            "'step-up SIP with 10% annual increase'."
+            "'step-up SIP with 10% annual increase'. "
+            "Input notes: annual_return is decimal (0.12 = 12%) but step_up_percent is whole percent (10.0 = 10%). "
+            "Limitations: monthly contributions only — for lump-sum use calculate_compound_interest. "
+            "See also: calculate_retirement (mode='monthly_contribution_for') to back-solve SIP for a target corpus."
         ),
         inputSchema={
             "type": "object",
@@ -95,6 +113,20 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["monthly_amount", "annual_return", "years"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "monthly_amount": {"type": "number", "description": "Echoed initial monthly contribution."},
+                "annual_return": {"type": "number", "description": "Echoed decimal annual return."},
+                "years": {"type": "number", "description": "Echoed investment horizon."},
+                "step_up_percent": {"type": "number", "description": "Echoed annual step-up percent."},
+                "total_invested": {"type": "number", "description": "Sum of all contributions made."},
+                "future_value": {"type": "number", "description": "Final corpus including returns."},
+                "wealth_gained": {"type": "number", "description": "future_value - total_invested."},
+            },
+            "required": ["monthly_amount", "annual_return", "years", "step_up_percent",
+                         "total_invested", "future_value", "wealth_gained"],
+        },
     ),
     types.Tool(
         name="calculate_loan_payment",
@@ -104,7 +136,10 @@ TOOLS: list[types.Tool] = [
             "Works for home loans, car loans, personal loans, mortgage. "
             "Example queries: 'EMI for ₹30L home loan at 8.5% for 20 years', "
             "'$300k mortgage at 6.5% for 30 years', "
-            "'what if I pay $200 extra per month on my car loan'."
+            "'what if I pay $200 extra per month on my car loan'. "
+            "Input notes: annual_rate is decimal — 0.085 = 8.5%, NOT 8.5. "
+            "Limitations: fixed-rate only — variable / floating-rate loans not supported. "
+            "See also: calculate_retirement for goal-based amortisation of a target corpus."
         ),
         inputSchema={
             "type": "object",
@@ -138,6 +173,32 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["principal", "annual_rate", "years"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "principal": {"type": "number", "description": "Echoed loan principal."},
+                "annual_rate": {"type": "number", "description": "Echoed decimal annual rate."},
+                "years": {"type": "integer", "description": "Echoed loan tenure in years."},
+                "monthly_payment": {"type": "number", "description": "Scheduled monthly EMI (excludes extra_monthly_payment)."},
+                "total_payment": {"type": "number", "description": "Sum of all payments over the loan life."},
+                "total_interest": {"type": "number", "description": "total_payment - principal."},
+                "amortization": {
+                    "type": "array",
+                    "description": "Month-by-month schedule (only if include_schedule=true).",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "month": {"type": "integer"},
+                            "principal_paid": {"type": "number"},
+                            "interest_paid": {"type": "number"},
+                            "balance": {"type": "number"},
+                        },
+                        "required": ["month", "principal_paid", "interest_paid", "balance"],
+                    },
+                },
+            },
+            "required": ["principal", "annual_rate", "years", "monthly_payment", "total_payment", "total_interest"],
+        },
     ),
     types.Tool(
         name="calculate_retirement",
@@ -148,7 +209,10 @@ TOOLS: list[types.Tool] = [
             "(3) safe_withdrawal — how much can I safely withdraw (4% rule)? "
             "Example queries: 'how much corpus to retire with ₹50k/month for 30 years', "
             "'SIP needed to build 2 crore corpus in 20 years', "
-            "'safe monthly withdrawal from $1M at 4% rule'."
+            "'safe monthly withdrawal from $1M at 4% rule'. "
+            "Input notes: all rates (return, inflation, withdrawal_rate) are decimal — 0.07 = 7%, NOT 7. "
+            "Limitations: assumes constant returns and inflation; no Monte Carlo or sequence-of-returns modelling. "
+            "See also: calculate_us_retirement_account for tax-advantaged 401k / Roth IRA contribution sizing."
         ),
         inputSchema={
             "type": "object",
@@ -210,6 +274,26 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["mode"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by mode. Common: echoes of relevant inputs.",
+            "properties": {
+                "annual_expense": {"type": "number", "description": "[corpus_needed] Echoed annual expense."},
+                "years_in_retirement": {"type": "integer", "description": "[corpus_needed] Echoed years in retirement."},
+                "post_retirement_return": {"type": "number", "description": "[corpus_needed] Echoed post-retirement return."},
+                "inflation": {"type": "number", "description": "[corpus_needed] Echoed inflation rate."},
+                "corpus_needed": {"type": "number", "description": "[corpus_needed] Required retirement corpus."},
+                "target_corpus": {"type": "number", "description": "[monthly_contribution_for] Echoed target corpus."},
+                "years_to_retirement": {"type": "integer", "description": "[monthly_contribution_for] Echoed years until retirement."},
+                "annual_return": {"type": "number", "description": "[monthly_contribution_for] Echoed expected annual return."},
+                "current_savings": {"type": "number", "description": "[monthly_contribution_for] Echoed existing savings."},
+                "monthly_contribution": {"type": "number", "description": "[monthly_contribution_for] Required monthly SIP."},
+                "corpus": {"type": "number", "description": "[safe_withdrawal] Echoed retirement corpus."},
+                "withdrawal_rate": {"type": "number", "description": "[safe_withdrawal] Echoed withdrawal rate."},
+                "annual_withdrawal": {"type": "number", "description": "[safe_withdrawal] Annual withdrawal amount."},
+                "monthly_withdrawal": {"type": "number", "description": "[safe_withdrawal] Monthly withdrawal amount."},
+            },
+        },
     ),
     types.Tool(
         name="calculate_bmi_bmr_tdee",
@@ -220,7 +304,10 @@ TOOLS: list[types.Tool] = [
             "(3) tdee — Total Daily Energy Expenditure from BMR and activity level. "
             "Example queries: 'BMI for 70kg 175cm', "
             "'BMR for 30-year-old male 80kg 180cm', "
-            "'TDEE for moderately active person with BMR 1700'."
+            "'TDEE for moderately active person with BMR 1700'. "
+            "Input notes: weight in kilograms, height in centimetres — never lbs/inches. Convert before calling. "
+            "Limitations: Mifflin-St Jeor only — Harris-Benedict, Katch-McArdle, body-fat-aware formulas not supported. "
+            "See also: chain bmr -> tdee by feeding the bmr_kcal output into tdee mode."
         ),
         inputSchema={
             "type": "object",
@@ -263,13 +350,32 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["mode"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by mode.",
+            "properties": {
+                "weight_kg": {"type": "number", "description": "[bmi/bmr] Echoed weight."},
+                "height_cm": {"type": "number", "description": "[bmi/bmr] Echoed height."},
+                "bmi": {"type": "number", "description": "[bmi] Body Mass Index value."},
+                "category": {"type": "string", "description": "[bmi] WHO category: underweight, normal, overweight, obese."},
+                "age_years": {"type": "integer", "description": "[bmr] Echoed age."},
+                "sex": {"type": "string", "description": "[bmr] Echoed biological sex."},
+                "bmr_kcal": {"type": "number", "description": "[bmr/tdee] Basal metabolic rate in kcal/day."},
+                "activity_level": {"type": "string", "description": "[tdee] Echoed activity level."},
+                "activity_multiplier": {"type": "number", "description": "[tdee] Activity multiplier applied to BMR."},
+                "tdee_kcal": {"type": "number", "description": "[tdee] Total daily energy expenditure in kcal/day."},
+            },
+        },
     ),
     types.Tool(
         name="convert_currency",
         description=(
             "Convert an amount between any two currencies using a caller-supplied USD-based rate dict. "
             "The caller must provide current exchange rates (USD=1.0 base). "
-            "Example: convert 1000 USD to INR with rates={'USD':1.0, 'INR':83.5}."
+            "Example: convert 1000 USD to INR with rates={'USD':1.0, 'INR':83.5}. "
+            "Input notes: rates are units-per-USD — INR 83.5 means 1 USD = 83.5 INR. USD must be present (typically 1.0). "
+            "Limitations: no live rate fetching — caller must supply rates dict each call. "
+            "See also: format_currency_amount to render the converted_amount with currency symbol / lakh-crore notation."
         ),
         inputSchema={
             "type": "object",
@@ -295,13 +401,27 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["amount", "from_currency", "to_currency", "rates"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "Echoed source amount."},
+                "from_currency": {"type": "string", "description": "Echoed source currency code."},
+                "to_currency": {"type": "string", "description": "Echoed target currency code."},
+                "rate_used": {"type": "number", "description": "Effective conversion factor applied."},
+                "converted_amount": {"type": "number", "description": "Converted amount in to_currency."},
+            },
+            "required": ["amount", "from_currency", "to_currency", "rate_used", "converted_amount"],
+        },
     ),
     types.Tool(
         name="format_currency_amount",
         description=(
             "Format a numeric amount as a human-readable currency string. "
             "For INR, optionally use Indian lakh/crore notation (₹15.00 L, ₹2.50 Cr). "
-            "Example queries: 'format 83500 in INR', 'display 25000000 as crores'."
+            "Example queries: 'format 83500 in INR', 'display 25000000 as crores'. "
+            "Input notes: lakh_crore_format is honoured ONLY when currency='INR' — silently ignored for other codes. "
+            "Limitations: no localisation of decimal/grouping separators per locale beyond INR. "
+            "See also: convert_currency to first convert between currencies, then format the result."
         ),
         inputSchema={
             "type": "object",
@@ -322,6 +442,15 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["amount", "currency"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "formatted": {"type": "string", "description": "Display string with currency symbol."},
+                "amount": {"type": "number", "description": "Echoed numeric amount."},
+                "currency": {"type": "string", "description": "Echoed currency code (uppercased)."},
+            },
+            "required": ["formatted", "amount", "currency"],
+        },
     ),
     # ------ Islamic Finance ------
     types.Tool(
@@ -331,7 +460,10 @@ TOOLS: list[types.Tool] = [
             "Sums all zakatable assets, deducts debts, checks nisab threshold (gold or silver basis), "
             "and returns the zakat due. Cross-cutting — any Muslim, any country. "
             "Example queries: 'how much Zakat do I owe on $25000 savings and $5000 stocks', "
-            "'zakat calculation with gold and silver holdings'."
+            "'zakat calculation with gold and silver holdings'. "
+            "Input notes: gold/silver prices must be in the SAME currency as the cash/stocks fields — caller-supplied, not auto-fetched. "
+            "Limitations: standard Hanafi nisab rules; does not handle agricultural zakat (ushr) or livestock (zakat al-an'am). "
+            "See also: calculate_saudi_zakat_citizen for ZATCA corporate zakat estimation in Saudi Arabia."
         ),
         inputSchema={
             "type": "object",
@@ -350,6 +482,19 @@ TOOLS: list[types.Tool] = [
             },
             "required": [],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "total_zakatable_assets": {"type": "number", "description": "Sum of all assets minus debts."},
+                "nisab_threshold_used": {"type": "number", "description": "Nisab threshold value in the chosen currency."},
+                "nisab_basis": {"type": "string", "description": "'gold' or 'silver' basis used."},
+                "is_above_nisab": {"type": "boolean", "description": "True if assets exceed nisab — zakat is due."},
+                "zakat_due": {"type": "number", "description": "Zakat owed (2.5% of total when above nisab; else 0)."},
+                "currency": {"type": "string", "description": "Echoed currency code."},
+            },
+            "required": ["total_zakatable_assets", "nisab_threshold_used", "nisab_basis",
+                         "is_above_nisab", "zakat_due", "currency"],
+        },
     ),
     types.Tool(
         name="calculate_islamic_financing",
@@ -361,7 +506,10 @@ TOOLS: list[types.Tool] = [
             "(3) mudarabah — profit-sharing investment (Sharia FD alternative). "
             "Example queries: 'murabaha financing for $100k house at 30% markup over 5 years', "
             "'ijarah lease for car worth $30k at $600/month for 5 years', "
-            "'mudarabah: investor puts $100k, profit $20k split 70/30'."
+            "'mudarabah: investor puts $100k, profit $20k split 70/30'. "
+            "Input notes: markup_percent is whole percent (30.0 = 30%) but investor_share_ratio is decimal (0.70 = 70%) — easy to swap. "
+            "Limitations: no diminishing-musharaka or sukuk modelling; murabaha assumes fixed markup, not variable. "
+            "See also: calculate_loan_payment for the conventional interest-bearing equivalent."
         ),
         inputSchema={
             "type": "object",
@@ -388,6 +536,37 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["instrument"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by instrument.",
+            "properties": {
+                "asset_cost": {"type": "number", "description": "[murabaha/ijarah] Echoed asset price."},
+                "markup_percent": {"type": "number", "description": "[murabaha] Echoed markup percent."},
+                "tenure_years": {"type": "integer", "description": "[murabaha] Echoed tenure in years."},
+                "down_payment": {"type": "number", "description": "[murabaha] Echoed down payment."},
+                "total_sale_price": {"type": "number", "description": "[murabaha] asset_cost * (1 + markup)."},
+                "principal_financed": {"type": "number", "description": "[murabaha] Amount financed after down payment."},
+                "monthly_installment": {"type": "number", "description": "[murabaha] Equal monthly installment."},
+                "total_paid": {"type": "number", "description": "[murabaha] Total paid over the tenure."},
+                "total_markup": {"type": "number", "description": "[murabaha] Bank's profit (markup amount)."},
+                "effective_apr_equivalent": {"type": "number", "description": "[murabaha] Equivalent conventional APR (for comparison only)."},
+                "monthly_rent": {"type": "number", "description": "[ijarah] Echoed monthly lease."},
+                "lease_years": {"type": "integer", "description": "[ijarah] Echoed lease duration."},
+                "transfer_fee": {"type": "number", "description": "[ijarah] Echoed token transfer fee."},
+                "total_rent_paid": {"type": "number", "description": "[ijarah] Total lease paid."},
+                "total_cost_of_ownership": {"type": "number", "description": "[ijarah] total_rent_paid + transfer_fee."},
+                "effective_cost_premium": {"type": "number", "description": "[ijarah] total_cost - asset_cost."},
+                "effective_premium_percent": {"type": "number", "description": "[ijarah] Premium as percent of asset_cost."},
+                "capital": {"type": "number", "description": "[mudarabah] Echoed investor capital."},
+                "actual_profit_amount": {"type": "number", "description": "[mudarabah] Echoed realised profit (or loss)."},
+                "investor_share_ratio": {"type": "number", "description": "[mudarabah] Echoed investor share."},
+                "investor_profit": {"type": "number", "description": "[mudarabah] Investor's share of profit."},
+                "manager_profit": {"type": "number", "description": "[mudarabah] Manager's (mudarib) share of profit."},
+                "investor_total": {"type": "number", "description": "[mudarabah] Capital + investor_profit."},
+                "years": {"type": ["number", "null"], "description": "[mudarabah] Echoed years (or null if omitted)."},
+                "annualised_return": {"type": ["number", "null"], "description": "[mudarabah] Annualised return (or null when years omitted)."},
+            },
+        },
     ),
     types.Tool(
         name="calculate_hajj_savings",
@@ -395,7 +574,10 @@ TOOLS: list[types.Tool] = [
             "Calculate the monthly savings needed to fund a Hajj pilgrimage by a target year. "
             "Accounts for existing savings and halal investment returns (sukuk/equity). "
             "Example queries: 'how much to save monthly for Hajj costing $8000 in 5 years', "
-            "'hajj savings plan with ₹50000 already saved, 6% return, 3 years'."
+            "'hajj savings plan with ₹50000 already saved, 6% return, 3 years'. "
+            "Input notes: expected_annual_return is decimal — 0.06 = 6%, NOT 6.0. "
+            "Limitations: hajj_cost_target is treated as fixed in today's money; does not auto-inflate Saudi pilgrimage costs. "
+            "See also: calculate_sip_dca for general goal-based monthly investment planning."
         ),
         inputSchema={
             "type": "object",
@@ -425,6 +607,22 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["hajj_cost_target", "years_to_hajj"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "hajj_cost_target": {"type": "number", "description": "Echoed Hajj cost target."},
+                "years_to_hajj": {"type": "integer", "description": "Echoed years until Hajj."},
+                "current_savings": {"type": "number", "description": "Echoed existing savings."},
+                "expected_annual_return": {"type": "number", "description": "Echoed expected return."},
+                "monthly_contribution_needed": {"type": "number", "description": "Required monthly savings amount."},
+                "total_contribution": {"type": "number", "description": "Sum of all monthly contributions over the period."},
+                "expected_growth": {"type": "number", "description": "Investment returns earned on contributions + current savings."},
+                "target_met_at_zero_contribution": {"type": "boolean", "description": "True if current_savings alone (compounded) meets the target."},
+            },
+            "required": ["hajj_cost_target", "years_to_hajj", "current_savings", "expected_annual_return",
+                         "monthly_contribution_needed", "total_contribution", "expected_growth",
+                         "target_met_at_zero_contribution"],
+        },
     ),
     types.Tool(
         name="screen_halal_stock",
@@ -432,7 +630,10 @@ TOOLS: list[types.Tool] = [
             "Screen a stock for Sharia compliance using AAOIFI standard financial ratios. "
             "Checks: business sector (haram/halal), debt ratio, cash ratio, receivables ratio, haram revenue ratio. "
             "Returns compliance verdict, failed checks, and purification ratio. "
-            "Example queries: 'is this tech stock halal?', 'AAOIFI screen for Apple with these financials'."
+            "Example queries: 'is this tech stock halal?', 'AAOIFI screen for Apple with these financials'. "
+            "Input notes: all monetary fields share the same currency (caller's choice); ratios are computed against market_cap and total_revenue. "
+            "Limitations: AAOIFI thresholds only — does not apply DJIM, S&P Shariah, or MSCI Islamic alternative thresholds. "
+            "See also: calculate_zakat for the purification ratio applied to actual holdings."
         ),
         inputSchema={
             "type": "object",
@@ -476,6 +677,29 @@ TOOLS: list[types.Tool] = [
             "required": ["sector", "market_cap", "debt_interest_bearing",
                          "cash_and_interest_securities", "receivables", "total_revenue"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "is_compliant": {"type": "boolean", "description": "True if all AAOIFI checks pass."},
+                "failed_checks": {
+                    "type": "array",
+                    "description": "List of human-readable reasons (empty if compliant).",
+                    "items": {"type": "string"},
+                },
+                "ratios": {
+                    "type": "object",
+                    "description": "Computed AAOIFI ratios.",
+                    "properties": {
+                        "debt_ratio": {"type": "number", "description": "debt / market_cap."},
+                        "cash_ratio": {"type": "number", "description": "cash+interest_securities / market_cap."},
+                        "receivables_ratio": {"type": "number", "description": "receivables / market_cap."},
+                        "haram_revenue_ratio": {"type": "number", "description": "haram_revenue / total_revenue."},
+                    },
+                },
+                "purification_ratio": {"type": "number", "description": "Fraction of dividends to purify (give to charity)."},
+            },
+            "required": ["is_compliant", "failed_checks", "ratios", "purification_ratio"],
+        },
     ),
     # ------ Country-specific ------
     types.Tool(
@@ -488,7 +712,10 @@ TOOLS: list[types.Tool] = [
             "country='au': income tax + Medicare Levy + optional HECS-HELP. "
             "country='in': India new/old regime with 87A rebate + cess. "
             "Example queries: 'US tax on $85000 income married filing jointly', "
-            "'UK income tax on £50000 salary', 'India income tax ₹12L new regime'."
+            "'UK income tax on £50000 salary', 'India income tax ₹12L new regime'. "
+            "Input notes: income is gross annual in local currency; do NOT pre-deduct standard deduction. "
+            "Limitations: 2026 tax year only — historical years not yet supported. CA computes federal only (no provincial). "
+            "See also: calculate_us_retirement_account for tax-advantaged 401k / Roth IRA contribution analysis."
         ),
         inputSchema={
             "type": "object",
@@ -531,6 +758,43 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["country", "income"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by country. Common: gross_income, year, taxable_income, tax_owed (us/ca/in) or income_tax+take_home (uk/au).",
+            "properties": {
+                "gross_income": {"type": "number", "description": "Echoed gross income."},
+                "year": {"type": "integer", "description": "Echoed tax year."},
+                "filing_status": {"type": "string", "description": "[us] Echoed filing status."},
+                "taxable_income": {"type": "number", "description": "[us/ca/uk/in] Income after deductions/allowances."},
+                "tax_owed": {"type": "number", "description": "[us/ca/in] Final tax liability."},
+                "income_tax": {"type": "number", "description": "[uk/au] Income tax component."},
+                "national_insurance": {"type": "number", "description": "[uk] NI Class 1 contribution."},
+                "medicare_levy": {"type": "number", "description": "[au] Medicare Levy."},
+                "hecs_repayment": {"type": "number", "description": "[au] HECS-HELP compulsory repayment (if has_hecs_debt)."},
+                "total_tax": {"type": "number", "description": "[uk/au] Sum of all taxes/levies."},
+                "take_home": {"type": "number", "description": "[uk/au] Net income after all taxes."},
+                "personal_allowance_used": {"type": "number", "description": "[uk] Personal allowance applied."},
+                "federal_tax_before_credits": {"type": "number", "description": "[ca] Federal tax before BPA credit."},
+                "basic_personal_credit": {"type": "number", "description": "[ca] Basic Personal Amount credit."},
+                "provincial_tax": {"type": "number", "description": "[ca] Provincial tax (currently 0 — not yet computed)."},
+                "province": {"type": "string", "description": "[ca] Echoed province."},
+                "regime": {"type": "string", "description": "[in] Echoed tax regime ('new' or 'old')."},
+                "standard_deduction": {"type": "number", "description": "[in] Standard deduction applied."},
+                "tax_before_rebate": {"type": "number", "description": "[in] Tax before 87A rebate."},
+                "rebate_87a": {"type": "number", "description": "[in] Section 87A rebate."},
+                "tax_after_rebate": {"type": "number", "description": "[in] Tax after 87A rebate."},
+                "health_education_cess": {"type": "number", "description": "[in] 4% cess on tax_after_rebate."},
+                "has_hecs_debt": {"type": "boolean", "description": "[au] Echoed HECS flag."},
+                "effective_rate": {"type": "number", "description": "Effective tax rate on gross_income (decimal)."},
+                "marginal_rate": {"type": "number", "description": "[us/ca/in] Marginal bracket rate."},
+                "bracket_breakdown": {
+                    "type": "array",
+                    "description": "Per-bracket / per-band tax breakdown. Field names vary by country.",
+                    "items": {"type": "object"},
+                },
+            },
+            "required": ["gross_income", "year"],
+        },
     ),
     types.Tool(
         name="calculate_us_retirement_account",
@@ -539,7 +803,10 @@ TOOLS: list[types.Tool] = [
             "account_type='traditional_401k': employee deferral, employer match, §415 cap, tax savings. "
             "account_type='roth_ira': eligibility check and MAGI phase-out calculation. "
             "Example queries: 'how much do I save in taxes with 401k contribution', "
-            "'am I eligible for Roth IRA at $155k income'."
+            "'am I eligible for Roth IRA at $155k income'. "
+            "Input notes: employer_match_percent and employer_match_cap are decimals — 0.50 = 50%, 0.06 = 6% of salary. marginal_tax_rate also decimal. "
+            "Limitations: 2026 IRS limits only; no SEP-IRA, SIMPLE-IRA, 403(b), 457(b), or HSA modelling. "
+            "See also: calculate_income_tax (country='us') for the full federal tax computation that the 401k deduction reduces."
         ),
         inputSchema={
             "type": "object",
@@ -600,6 +867,31 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["account_type", "contribution", "age"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by account_type.",
+            "properties": {
+                "age": {"type": "integer", "description": "Echoed contributor age."},
+                "employee_contribution": {"type": "number", "description": "[traditional_401k] Employee deferral after capping at limit."},
+                "employer_contribution": {"type": "number", "description": "[traditional_401k] Computed employer match."},
+                "total_contribution": {"type": "number", "description": "[traditional_401k] Employee + employer contributions."},
+                "employee_limit": {"type": "number", "description": "[traditional_401k] 2026 employee deferral cap (incl. catch-up if 50+)."},
+                "total_limit": {"type": "number", "description": "[traditional_401k] §415 total annual additions cap."},
+                "is_employee_maxed": {"type": "boolean", "description": "[traditional_401k] True if employee hit the deferral cap."},
+                "is_total_maxed": {"type": "boolean", "description": "[traditional_401k] True if combined hit the §415 cap."},
+                "tax_savings_now": {"type": "number", "description": "[traditional_401k] employee_contribution * marginal_tax_rate."},
+                "marginal_rate_used": {"type": "number", "description": "[traditional_401k] Echoed marginal tax rate."},
+                "requested_contribution": {"type": "number", "description": "[roth_ira] Echoed requested contribution."},
+                "effective_contribution": {"type": "number", "description": "[roth_ira] Allowed amount after MAGI phase-out."},
+                "contribution_limit": {"type": "number", "description": "[roth_ira] 2026 Roth IRA contribution cap (incl. catch-up if 50+)."},
+                "phase_out_factor": {"type": "number", "description": "[roth_ira] Fraction allowed (1.0 = full, 0.0 = ineligible)."},
+                "magi": {"type": "number", "description": "[roth_ira] Echoed MAGI."},
+                "filing_status": {"type": "string", "description": "[roth_ira] Echoed filing status."},
+                "phase_out_low": {"type": "number", "description": "[roth_ira] Lower MAGI threshold for phase-out."},
+                "phase_out_high": {"type": "number", "description": "[roth_ira] Upper MAGI threshold (full phase-out)."},
+            },
+            "required": ["age"],
+        },
     ),
     types.Tool(
         name="calculate_eosg",
@@ -609,7 +901,10 @@ TOOLS: list[types.Tool] = [
             "Saudi: Saudi Labour Law Articles 84-87 — ½ month/year first 5 years, 1 month/year after; "
             "resignation factor applies. "
             "Example queries: 'UAE gratuity for 7 years service at AED 8000 basic salary', "
-            "'Saudi EOSG if I resign after 6 years on SAR 5000 salary'."
+            "'Saudi EOSG if I resign after 6 years on SAR 5000 salary'. "
+            "Input notes: monthly_basic_salary EXCLUDES allowances (housing, transport, etc.); years_of_service accepts fractional years (5.5). "
+            "Limitations: GCC private-sector only — government, free-zone, or public-sector EOSG rules not modelled. "
+            "See also: calculate_vat for tax handling on the gratuity payout (typically VAT-exempt; verify with employer)."
         ),
         inputSchema={
             "type": "object",
@@ -644,6 +939,25 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["country", "monthly_basic_salary", "years_of_service"],
         },
+        outputSchema={
+            "type": "object",
+            "description": "Output keys vary by country.",
+            "properties": {
+                "monthly_basic_salary": {"type": "number", "description": "Echoed monthly basic salary."},
+                "years_of_service": {"type": "number", "description": "Echoed years of service."},
+                "daily_basic_wage": {"type": "number", "description": "[ae] Daily wage (basic / 30)."},
+                "gratuity_before_cap": {"type": "number", "description": "[ae] Computed gratuity before 2-year-salary cap."},
+                "gratuity_aed": {"type": "number", "description": "[ae] Final gratuity payable in AED."},
+                "is_capped": {"type": "boolean", "description": "[ae] True if 2-year-salary cap reduced the payout."},
+                "formula_used": {"type": "string", "description": "[ae] Tag describing the formula applied."},
+                "end_reason": {"type": "string", "description": "[sa] Echoed reason for leaving."},
+                "accrued_gratuity_full": {"type": "number", "description": "[sa] Full accrued amount before resignation factor."},
+                "entitlement_factor": {"type": "number", "description": "[sa] Resignation reduction factor (1.0 for termination)."},
+                "gratuity_sar": {"type": "number", "description": "[sa] Final gratuity payable in SAR."},
+                "formula_note": {"type": "string", "description": "[sa] Tag describing the formula applied."},
+            },
+            "required": ["monthly_basic_salary", "years_of_service"],
+        },
     ),
     types.Tool(
         name="calculate_vat",
@@ -651,7 +965,10 @@ TOOLS: list[types.Tool] = [
             "Calculate VAT for UAE (5%) or Saudi Arabia (15%). "
             "Works for both ex-VAT and VAT-inclusive amounts. "
             "Example queries: 'UAE VAT on AED 1000 product', "
-            "'what is the VAT-exclusive price of SAR 1150 including 15% VAT'."
+            "'what is the VAT-exclusive price of SAR 1150 including 15% VAT'. "
+            "Input notes: set is_inclusive=true when the amount already contains VAT (reverse-extract); default false. "
+            "Limitations: GCC standard rates only — does not model zero-rated, exempt, or out-of-scope supplies. "
+            "See also: calculate_eosg for end-of-service gratuity which is typically VAT-exempt."
         ),
         inputSchema={
             "type": "object",
@@ -674,6 +991,17 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["country", "amount"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "vat_amount": {"type": "number", "description": "VAT component of the transaction."},
+                "net_amount": {"type": "number", "description": "Amount excluding VAT."},
+                "gross_amount": {"type": "number", "description": "Amount including VAT."},
+                "rate": {"type": "number", "description": "Decimal VAT rate applied (0.05 or 0.15)."},
+                "is_inclusive": {"type": "boolean", "description": "Echoed input flag."},
+            },
+            "required": ["vat_amount", "net_amount", "gross_amount", "rate", "is_inclusive"],
+        },
     ),
     types.Tool(
         name="calculate_saudi_zakat_citizen",
@@ -681,7 +1009,10 @@ TOOLS: list[types.Tool] = [
             "Estimate ZATCA-collected Zakat for Saudi / GCC nationals (simplified 2.5% estimator). "
             "Caller supplies the pre-computed zakat base. Returns zakat due with a disclaimer that "
             "actual ZATCA computation requires full financial statements. "
-            "Example query: 'estimate Saudi corporate zakat on SAR 1M zakat base'."
+            "Example query: 'estimate Saudi corporate zakat on SAR 1M zakat base'. "
+            "Input notes: zakat_base is the caller-computed adjusted equity figure per ZATCA — this tool does NOT derive it from raw balance-sheet items. "
+            "Limitations: 2.5% flat applied; does not model the deemed-base alternative or industry-specific ZATCA rules. "
+            "See also: calculate_zakat for personal Zakat al-Mal computation from raw asset breakdown."
         ),
         inputSchema={
             "type": "object",
@@ -694,6 +1025,16 @@ TOOLS: list[types.Tool] = [
             },
             "required": ["zakat_base"],
         },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "zakat_base": {"type": "number", "description": "Echoed zakat base."},
+                "zakat_due": {"type": "number", "description": "2.5% of zakat_base."},
+                "rate": {"type": "number", "description": "Applied rate (0.025)."},
+                "disclaimer": {"type": "string", "description": "Required disclaimer about real ZATCA computation."},
+            },
+            "required": ["zakat_base", "zakat_due", "rate", "disclaimer"],
+        },
     ),
     types.Tool(
         name="calculate_india_electricity_bill",
@@ -703,7 +1044,10 @@ TOOLS: list[types.Tool] = [
             "or supply custom slabs. The constants BESCOM_RESIDENTIAL, MSEB_RESIDENTIAL, BSES_RESIDENTIAL "
             "are importable from calcnook.countries.india.electricity_bill for custom use. "
             "Example queries: 'electricity bill for 250 units in Bangalore (BESCOM)', "
-            "'Delhi BSES bill for 400 units with ₹100 fixed charge'."
+            "'Delhi BSES bill for 400 units with ₹100 fixed charge'. "
+            "Input notes: electricity_duty_percent is whole percent (6 = 6%, NOT 0.06); fuel_surcharge_per_unit and rates are in ₹/kWh. "
+            "Limitations: residential tariffs only — no commercial / industrial / TOD slab support. Provide preset OR slabs (one is required). "
+            "See also: format_currency_amount with currency='INR' to display total_bill in lakh/crore notation."
         ),
         inputSchema={
             "type": "object",
@@ -747,6 +1091,32 @@ TOOLS: list[types.Tool] = [
                 },
             },
             "required": ["units_consumed"],
+        },
+        outputSchema={
+            "type": "object",
+            "properties": {
+                "units_consumed": {"type": "number", "description": "Echoed kWh consumed."},
+                "energy_charge": {"type": "number", "description": "Slab-tariff energy cost in ₹."},
+                "fixed_charges": {"type": "number", "description": "Echoed monthly fixed/demand charges."},
+                "fuel_surcharge": {"type": "number", "description": "Total fuel surcharge in ₹."},
+                "electricity_duty": {"type": "number", "description": "Computed electricity duty in ₹."},
+                "total_bill": {"type": "number", "description": "Final bill amount in ₹."},
+                "slab_breakdown": {
+                    "type": "array",
+                    "description": "Per-slab consumption and charge breakdown.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "slab_upper": {"type": ["number", "string"]},
+                            "rate_per_unit": {"type": "number"},
+                            "units_in_slab": {"type": "number"},
+                            "energy_charge": {"type": "number"},
+                        },
+                    },
+                },
+            },
+            "required": ["units_consumed", "energy_charge", "fixed_charges", "fuel_surcharge",
+                         "electricity_duty", "total_bill", "slab_breakdown"],
         },
     ),
 ]
