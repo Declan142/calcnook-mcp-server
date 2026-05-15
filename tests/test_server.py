@@ -7,7 +7,7 @@ import pytest
 from calcnook_mcp.server import TOOLS, DISPATCH
 
 
-EXPECTED_TOOL_COUNT = 17
+EXPECTED_TOOL_COUNT = 23
 
 
 def test_tool_count() -> None:
