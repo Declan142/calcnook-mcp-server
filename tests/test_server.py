@@ -7,11 +7,11 @@ import pytest
 from calcnook_mcp.server import TOOLS, DISPATCH
 
 
-EXPECTED_TOOL_COUNT = 17
+EXPECTED_TOOL_COUNT = 20
 
 
 def test_tool_count() -> None:
-    """Server must expose exactly 17 tools."""
+    """Server must expose exactly 20 tools (17 atomic + 3 composite agentic)."""
     assert len(TOOLS) == EXPECTED_TOOL_COUNT, (
         f"Expected {EXPECTED_TOOL_COUNT} tools, got {len(TOOLS)}: "
         f"{[t.name for t in TOOLS]}"
@@ -55,7 +55,7 @@ def test_all_tools_have_description() -> None:
 
 def test_tool_names_follow_convention() -> None:
     """Tool names should be snake_case and start with a verb."""
-    valid_prefixes = ("calculate_", "convert_", "screen_", "format_")
+    valid_prefixes = ("calculate_", "convert_", "screen_", "format_", "analyze_", "compare_", "financial_")
     for tool in TOOLS:
         assert tool.name.islower(), f"Tool '{tool.name}' must be snake_case"
         assert any(tool.name.startswith(p) for p in valid_prefixes), (
