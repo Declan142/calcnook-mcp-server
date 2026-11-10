@@ -52,3 +52,10 @@ cover/
 
 # Dist artifacts — local build
 dist/
+
+# Secret-shaped files (repo-standard pass 2026-11-10)
+.env.*
+!.env.example
+*token*.json
+*secret*
+*credential*
